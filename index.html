@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculator</title>
+  <style>
+    :root { --purple:#8580d1; --dark:#2d2b35; --key:#302e38; --accent:#58328c; --equal:#8545df; }
+    * { box-sizing: border-box; }
+    body {
+      margin:0; min-height:100vh; display:grid; place-items:center; padding:24px;
+      background:var(--purple); font-family:Arial, Helvetica, sans-serif;
+    }
+    .calculator {
+      width:min(230px, 90vw); min-height:365px; padding:25px 20px 20px;
+      border-radius:32px; background:var(--dark);
+      box-shadow:0 22px 28px rgba(29,25,45,.35), inset 0 2px 4px rgba(255,255,255,.08);
+    }
+    .display {
+      height:125px; display:flex; flex-direction:column; justify-content:flex-end;
+      align-items:flex-end; gap:8px; padding:0 4px 16px; overflow:hidden; color:#f7f5fb;
+    }
+    .expression { min-height:18px; width:100%; text-align:right; color:#aaa6b5; font-size:13px; overflow-wrap:anywhere; }
+    .value { width:100%; text-align:right; font-size:24px; line-height:1.2; overflow-wrap:anywhere; }
+    .keys { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
+    button {
+      appearance:none; border:0; border-radius:50%; aspect-ratio:1; min-width:0;
+      color:#f4f1fa; background:var(--key); font-size:16px; cursor:pointer;
+      box-shadow:0 3px 5px rgba(0,0,0,.28), inset 0 1px 1px rgba(255,255,255,.06);
+      transition:transform .08s ease, filter .12s ease;
+    }
+    button:hover { filter:brightness(1.13); }
+    button:active { transform:scale(.94); }
+    button.operator { background:var(--accent); font-size:21px; font-weight:300; }
+    button.clear { color:#a65cff; font-size:14px; font-weight:600; }
+    button.equals { background:var(--equal); font-size:22px; }
+    button:focus-visible { outline:2px solid white; outline-offset:2px; }
+    @media (max-height:430px) { .calculator { transform:scale(.88); } }
+  </style>
+</head>
+<body>
+  <main class="calculator" aria-label="Calculator">
+    <section class="display" aria-live="polite" aria-atomic="true">
+      <div class="expression" id="expression"></div>
+      <div class="value" id="display">0</div>
+    </section>
+    <section class="keys" aria-label="Calculator keys">
+      <button data-number="7">7</button><button data-number="8">8</button><button data-number="9">9</button><button class="operator" data-operation="multiply" aria-label="Multiply">×</button>
+      <button data-number="4">4</button><button data-number="5">5</button><button data-number="6">6</button><button class="operator" data-operation="subtract" aria-label="Subtract">−</button>
+      <button data-number="1">1</button><button data-number="2">2</button><button data-number="3">3</button><button class="operator" data-operation="add" aria-label="Add">+</button>
+      <button class="clear" data-action="clear">CE</button><button data-number="0">0</button><button class="equals" data-action="equals" aria-label="Equals">=</button><button class="operator" data-operation="divide" aria-label="Divide">÷</button>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const display = document.getElementById('display');
+      const expression = document.getElementById('expression');
+      let current = '0', stored = null, operation = null, waitingForNumber = false, justCalculated = false;
+      const symbols = { add: '+', subtract: '−', multiply: '×', divide: '÷' };
+      const render = () => { display.textContent = current; };
+      const clear = () => { current = '0'; stored = null; operation = null; waitingForNumber = false; justCalculated = false; expression.textContent = ''; render(); };
+      const inputNumber = n => {
+        if (current === 'Error' || waitingForNumber || justCalculated) {
+          current = n; waitingForNumber = false; justCalculated = false;
+          if (operation === null) expression.textContent = '';
+        } else if (current === '0') current = n;
+        else if (current.replace('-', '').replace('.', '').length < 14) current += n;
+        render();
+      };
+      const calculate = (a, b, op) => {
+        if (op === 'add') return a + b;
+        if (op === 'subtract') return a - b;
+        if (op === 'multiply') return a * b;
+        if (op === 'divide') return b === 0 ? null : a / b;
+        return b;
+      };
+      const tidy = n => {
+        if (!Number.isFinite(n)) return 'Error';
+        return String(Number(n.toPrecision(12)));
+      };
+      const chooseOperation = op => {
+        if (current === 'Error') clear();
+        const value = Number(current);
+        if (operation && !waitingForNumber) {
+          const result = calculate(stored, value, operation);
+          if (result === null) { current = 'Error'; stored = null; operation = null; expression.textContent = 'Cannot divide by zero'; render(); return; }
+          current = tidy(result); render(); stored = Number(current);
+        } else stored = value;
+        operation = op; waitingForNumber = true; justCalculated = false;
+        expression.textContent = `${current} ${symbols[op]}`;
+      };
+      const equals = () => {
+        if (!operation || stored === null || waitingForNumber) return;
+        const a = stored, b = Number(current), op = operation;
+        const result = calculate(a, b, op);
+        expression.textContent = `${a} ${symbols[op]} ${b} =`;
+        current = result === null ? 'Error' : tidy(result);
+        if (result === null) expression.textContent = 'Cannot divide by zero';
+        stored = null; operation = null; waitingForNumber = false; justCalculated = true; render();
+      };
+      document.querySelector('.keys').addEventListener('click', e => {
+        const btn = e.target.closest('button'); if (!btn) return;
+        if (btn.dataset.number !== undefined) inputNumber(btn.dataset.number);
+        else if (btn.dataset.operation) chooseOperation(btn.dataset.operation);
+        else if (btn.dataset.action === 'clear') clear();
+        else if (btn.dataset.action === 'equals') equals();
+      });
+      document.addEventListener('keydown', e => {
+        if (/^[0-9]$/.test(e.key)) inputNumber(e.key);
+        else if (e.key === '.') {
+          if (current === 'Error' || waitingForNumber || justCalculated) { current = '0.'; waitingForNumber = false; justCalculated = false; }
+          else if (!current.includes('.')) current += '.';
+          render();
+        } else if (e.key === '+') chooseOperation('add');
+        else if (e.key === '-') chooseOperation('subtract');
+        else if (e.key === '*') chooseOperation('multiply');
+        else if (e.key === '/') { e.preventDefault(); chooseOperation('divide'); }
+        else if (e.key === 'Enter' || e.key === '=') { e.preventDefault(); equals(); }
+        else if (e.key === 'Escape' || e.key === 'Delete' || e.key === 'Backspace') clear();
+      });
+      render();
+    })();
+  </script>
+</body>
+</html>
